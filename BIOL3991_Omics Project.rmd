@@ -4,34 +4,47 @@ author: "Thuy Le"
 date: "2026-02-25"
 output: html_document
 ---
-
-```{r set variables}
-DataIn <- "XXXX"
-TargetFile <- "YYYY"
-  
-```
-
-
-```{r import data}
+# Import or install the packages to use later
+```{r install package}
 library(readxl)
 library(purrr)
+library(tidyverse)
+```
 
-xlsx_path <- path.expand(Sys.getenv("MTA_EXCEL_PATH"))
-stopifnot(file.exists(xlsx_path))
+# Sync the excel file to OneDrive
+If you haven't had OneDrive on your computer yet, download it and log in by mta email.
+
+Go to your OneDrive on your computer, there is "BIOL 3991_Omics data" folder and our excel is in it. Log in to the OneDrive on your computer and make sure you download the folder in your OneDrive by press on the clound with down arrow icon next to the folder
+
+#Import datat
+```{r import data, message=FALSE}
+# Find your exact file path
+hits <- list.files(path.expand("~/Library/CloudStorage"),
+                   pattern = "prodataMULTIPLIED\\.xlsx$",
+                   recursive = TRUE,
+                   full.names = TRUE)
+hits
+
+# Paste your file path in ""
+xlsx_path <- path.expand("/Users/kyoshiinari/Library/CloudStorage/OneDrive-MountAllisonUniversity/BIOL 3991_Omics data/prodataMULTIPLIED.xlsx")
 
 sheets <- excel_sheets(xlsx_path)
-data_list <- setNames(map(sheets, ~ read_excel(xlsx_path, sheet = .x)), sheets)
-
-data_list[["Raw Data"]]
-print(data_list)
+raw_data <- setNames(map(sheets, ~ read_excel(xlsx_path, sheet = .x)), sheets)
+print(raw_data)
 ```
 
 ## Including Plots
 
 You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
+```{r }
 plot(pressure)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+
+
+
+
