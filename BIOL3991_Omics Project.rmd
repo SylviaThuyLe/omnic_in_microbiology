@@ -1,0 +1,37 @@
+---
+title: "BIOL 3991_Omics Project"
+author: "Thuy Le"
+date: "2026-02-25"
+output: html_document
+---
+
+```{r set variables}
+DataIn <- "XXXX"
+TargetFile <- "YYYY"
+  
+```
+
+
+```{r import data}
+library(readxl)
+library(purrr)
+
+xlsx_path <- path.expand(Sys.getenv("MTA_EXCEL_PATH"))
+stopifnot(file.exists(xlsx_path))
+
+sheets <- excel_sheets(xlsx_path)
+data_list <- setNames(map(sheets, ~ read_excel(xlsx_path, sheet = .x)), sheets)
+
+data_list[["Raw Data"]]
+print(data_list)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
