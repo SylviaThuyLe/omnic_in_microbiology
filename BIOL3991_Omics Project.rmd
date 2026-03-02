@@ -16,6 +16,9 @@ If you haven't had OneDrive on your computer yet, download it and log in by mta 
 
 Go to your OneDrive on your computer, there is "BIOL 3991_Omics data" folder and our excel is in it. Log in to the OneDrive on your computer and make sure you download the folder in your OneDrive by press on the clound with down arrow icon next to the folder
 
+This is the OneDrive folder link in case you missed it:
+https://mountallison-my.sharepoint.com/:f:/r/personal/ttle_mta_ca/Documents/BIOL%203991_Omics%20data?csf=1&web=1&e=DoE83U
+
 #Import datat
 ```{r import data, message=FALSE}
 # Find your exact file path (erase the "#" at the start of the line to use it)
@@ -40,12 +43,13 @@ raw_data <- setNames(map(sheets, ~ read_excel(xlsx_path, sheet = .x)), sheets)
 print(raw_data)
 ```
 
-## Including Plots
+## Figure
 
-You can also embed plots, for example:
-
-```{r }
-plot(pressure)
+```{r heat map}
+ggplot(data, aes(X, Y, fill= Z)) + 
+  geom_tile() +
+  scale_fill_distiller(palette = "RdPu") +
+  theme_ipsum()
 ```
 
 
