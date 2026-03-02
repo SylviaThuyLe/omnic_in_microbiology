@@ -5,7 +5,7 @@ date: "2026-02-25"
 output: html_document
 ---
 # Import or install the packages to use later
-```{r install package}
+```{r install package, message = FALSE}
 library(readxl)
 library(purrr)
 library(tidyverse)
@@ -18,15 +18,22 @@ Go to your OneDrive on your computer, there is "BIOL 3991_Omics data" folder and
 
 #Import datat
 ```{r import data, message=FALSE}
-# Find your exact file path
+# Find your exact file path (erase the "#" at the start of the line to use it)
+## Mac OS version
 hits <- list.files(path.expand("~/Library/CloudStorage"),
-                   pattern = "prodataMULTIPLIED\\.xlsx$",
+                   pattern = "prodatawithCELLCOUNTS\\.xlsx$",
                    recursive = TRUE,
                    full.names = TRUE)
-hits
+## Window version
+#hits<-list.files(path.expand("~"),
+#                 pattern="prodatawithCELLCOUNTS\\.xlsx$",
+#                 recursive=TRUE,
+#                 full. Names=TRUE)
+
+hits # You will see your file path here 
 
 # Paste your file path in ""
-xlsx_path <- path.expand("/Users/kyoshiinari/Library/CloudStorage/OneDrive-MountAllisonUniversity/BIOL 3991_Omics data/prodataMULTIPLIED.xlsx")
+xlsx_path <- path.expand("/Users/kyoshiinari/Library/CloudStorage/OneDrive-MountAllisonUniversity/BIOL 3991_Omics data/prodatawithCELLCOUNTS.xlsx")
 
 sheets <- excel_sheets(xlsx_path)
 raw_data <- setNames(map(sheets, ~ read_excel(xlsx_path, sheet = .x)), sheets)
