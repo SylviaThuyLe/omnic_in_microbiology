@@ -9,6 +9,8 @@ output: html_document
 library(readxl)
 library(purrr)
 library(tidyverse)
+library(stringr)
+library(viridis)
 ```
 
 # Sync the excel file to OneDrive
@@ -45,17 +47,152 @@ print(raw_data)
 
 ## Figure
 
-```{r heat map}
-ggplot(data, aes(X, Y, fill= Z)) + 
-  geom_tile() +
-  scale_fill_distiller(palette = "RdPu") +
-  theme_ipsum()
+
+```{r}
+
+
+# ---- 1) Pick the sheet that contains the metabolite table ----
+# (This auto-picks the first sheet that has a "mtabName" column)
+sheet_name <- names(raw_data)[map_lgl(raw_data, ~ "mtabName" %in% names(.x))][1]
+df <- raw_data[[sheet_name]]
+
+# ---- 2) Identify sample columns (all CMP032* columns) ----
+sample_cols <- grep("^CMP032", names(df), value = TRUE)
+
+# ---- 3) Long format + log10 transform (exactly: log10(conc + 1e-12)) ----
+# Also: turn 0 into NA so it plots as blank (white)
+long <- df %>%
+  select(mtabName, all_of(sample_cols)) %>%
+  pivot_longer(-mtabName, names_to = "sample", values_to = "conc") %>%
+  mutate(
+    conc = as.numeric(conc),
+    conc = na_if(conc, 0),  # make zeros blank on heatmap
+    sample_disp = sample %>%
+      str_replace_all("\\.+", "_") %>%
+      str_replace_all("__+", "_") %>%
+      str_replace_all("_$", ""),
+    Condition = str_extract(sample_disp, "repl|lown|lowp"),
+    Replicate = str_extract(sample_disp, "(?<=_)[A-Za-z]$"),
+    Condition = factor(Condition, levels = c("repl", "lown", "lowp")),
+    Replicate = factor(Replicate, levels = c("A", "B", "C")),
+    log10_conc = log10(conc + 1e-12)  # <- this is where raw becomes log10
+  )
+
+# Keep sample order: repl A/B/C, lown A/B/C, lowp A/B/C
+sample_levels <- long %>%
+  distinct(sample_disp, Condition, Replicate) %>%
+  arrange(Condition, Replicate) %>%
+  pull(sample_disp)
+
+# Keep metabolite order like your table, but flipped so first row ends up at bottom
+met_levels <- rev(unique(df$mtabName))
+
+long <- long %>%
+  mutate(
+    sample_disp = factor(sample_disp, levels = sample_levels),
+    mtabName = factor(mtabName, levels = met_levels)
+  )
+
+# Optional: set legend range similar to your screenshot (so the scale looks comparable)
+lims <- range(long$log10_conc, na.rm = TRUE)
+lims <- c(min(lims[1], -10), max(lims[2], -2.5))
+
 ```
 
+```{r heat map}
+# Plot
+p <- ggplot(long, aes(x = sample_disp, y = mtabName, fill = log10_conc)) +
+  geom_tile() +
+  geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
+  scale_fill_viridis_c(option = "F", direction = -1, 
+    na.value = "white",
+    begin = 0.20,
+    limits = lims,
+    breaks = c(-2.5, -5, -7.5, -10)
+) +  
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(
+    title = "Metabolite Concentrations Heatmap",
+    x = "Sample",
+    y = "Metabolites",
+    fill = "log10(Concentration + 1e-12)"
+  ) +
+#  theme_void() +
+  theme(
+#   panel.grid = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
+    axis.title = element_text(face = "bold", size = 16),
 
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
+    axis.text.y = element_text(size = 11),
 
+    legend.title = element_text(size = 13),
+    legend.text  = element_text(size = 12),
 
+    plot.margin = margin(10, 15, 10, 10)
+  )
 
+p
+
+ggsave("metabolite_heatmap_log10.png",p, width = 12, height = 8, dpi = 300)
+```
+
+# Figure 2
+```{r}
+# Calculate log2 fold change relative to the repl mean for each metabolite
+fc_long <- long %>%
+  group_by(mtabName) %>%
+  mutate(
+    repl_mean = mean(conc[Condition == "repl"], na.rm = TRUE),
+    log2_fc = log2(conc / repl_mean),
+    log2_fc = ifelse(is.finite(log2_fc), log2_fc, NA)
+  ) %>%
+  ungroup()
+
+# Use a symmetric legend around 0
+fc_lim <- max(abs(fc_long$log2_fc), na.rm = TRUE)
+
+```
+
+```{r}
+# Plot
+p_fc <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2_fc)) +
+  geom_tile(width = 1, height = 1) +
+  geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
+  scale_fill_gradient2(
+    low = "#f4b6c2",     # light pink for negative
+    mid = "grey95",      # near 0
+    high = "red",        # positive
+    midpoint = 0,
+    na.value = "white",
+    limits = c(-fc_lim, fc_lim),
+    breaks = c(-8, -4, 0, 4, 8),
+    name = "Log2FC"
+  ) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(
+    title = "Differential Metabolic Profiles",
+    subtitle = "Log2 Fold Change relative to Control (repl) mean",
+    x = "Samples",
+    y = "Metabolites"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
+    plot.subtitle = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(face = "bold", size = 16),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
+    axis.text.y = element_text(size = 11),
+    legend.title = element_text(size = 13),
+    legend.text = element_text(size = 12),
+    plot.margin = margin(10, 15, 10, 10)
+  )
+
+p_fc
+
+ggsave("metabolite_heatmap_log2fc.png", p_fc, width = 12, height = 8, dpi = 300)
+```
 
 
 
