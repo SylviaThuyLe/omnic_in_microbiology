@@ -10,7 +10,8 @@ library(readxl)
 library(purrr)
 library(tidyverse)
 library(stringr)
-library(viridis)
+library(dplyr)  
+library(paletteer)
 ```
 
 # Sync the excel file to OneDrive
@@ -140,58 +141,61 @@ ggsave("metabolite_heatmap_log10.png",p, width = 12, height = 8, dpi = 300)
 
 # Figure 2
 ```{r}
-# Calculate log2 fold change relative to the repl mean for each metabolite
+# Control group name (change this if your control is different)
+control_group <- "repl"
+
+# Same pseudocount idea as before (prevents log(0) + division by 0)
+pseudo <- 1e-12
+
 fc_long <- long %>%
   group_by(mtabName) %>%
   mutate(
-    repl_mean = mean(conc[Condition == "repl"], na.rm = TRUE),
-    log2_fc = log2(conc / repl_mean),
-    log2_fc = ifelse(is.finite(log2_fc), log2_fc, NA)
+    control_mean = mean(conc[Condition == control_group], na.rm = TRUE),
+    log2FC = log2((conc + pseudo) / (control_mean + pseudo))
   ) %>%
   ungroup()
-
-# Use a symmetric legend around 0
-fc_lim <- max(abs(fc_long$log2_fc), na.rm = TRUE)
 
 ```
 
 ```{r}
 # Plot
-p_fc <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2_fc)) +
-  geom_tile(width = 1, height = 1) +
+max_abs <- max(abs(fc_long$log2FC), na.rm = TRUE)
+
+p_fc <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
+  geom_tile(color = "white", linewidth = 0.25) +
   geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
-  scale_fill_gradient2(
-    low = "#f4b6c2",     # light pink for negative
-    mid = "grey95",      # near 0
-    high = "red",        # positive
-    midpoint = 0,
-    na.value = "white",
-    limits = c(-fc_lim, fc_lim),
-    breaks = c(-8, -4, 0, 4, 8),
-    name = "Log2FC"
-  ) +
+  scale_fill_distiller(
+  palette = "RdBu",
+    direction = -1,
+    limits = c(-max_abs, max_abs),
+    na.value = "white"
+) +
+  labs(fill = "log2FC") +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
   labs(
-    title = "Differential Metabolic Profiles",
+    title = "Different Metabolic Profiles",
     subtitle = "Log2 Fold Change relative to Control (repl) mean",
-    x = "Samples",
-    y = "Metabolites"
+    x = "Sample",
+    y = "Metabolites",
+    fill = "log2FC"
   ) +
   theme(
     plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
-    plot.subtitle = element_text(hjust = 0.5, size = 16),
     axis.title = element_text(face = "bold", size = 16),
+
     axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
     axis.text.y = element_text(size = 11),
+
     legend.title = element_text(size = 13),
-    legend.text = element_text(size = 12),
+    legend.text  = element_text(size = 12),
+
     plot.margin = margin(10, 15, 10, 10)
   )
 
 p_fc
 
-ggsave("metabolite_heatmap_log2fc.png", p_fc, width = 12, height = 8, dpi = 300)
+ggsave("metabolite_heatmap_log2fc.png", p_fc, width = 10, height = 8, dpi = 300)
 ```
 
 
