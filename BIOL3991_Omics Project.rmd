@@ -49,8 +49,7 @@ print(raw_data)
 ## Figure
 
 
-```{r}
-
+```{r Thuy ver, get rid of 0}
 
 # ---- 1) Pick the sheet that contains the metabolite table ----
 # (This auto-picks the first sheet that has a "mtabName" column)
@@ -99,6 +98,7 @@ lims <- range(long$log10_conc, na.rm = TRUE)
 lims <- c(min(lims[1], -10), max(lims[2], -2.5))
 
 ```
+ 
 
 ```{r heat map}
 # Plot
@@ -140,7 +140,7 @@ ggsave("metabolite_heatmap_log10.png",p, width = 12, height = 8, dpi = 300)
 ```
 
 # Figure 2
-```{r}
+```{r Thuy ver, get rid of 0 in cal}
 # Control group name (change this if your control is different)
 control_group <- "repl"
 
@@ -156,6 +156,19 @@ fc_long <- long %>%
   ungroup()
 
 ```
+
+
+Sydney ver, include 0 
+
+df_log2fc <- df %>%
+
+  mutate(control_mean = rowMeans(select(., contains("repl")), na.rm = TRUE)) %>%
+
+  mutate(across(starts_with("CMP"), ~ log2((. + 1e-12) / (control_mean + 1e-12)))) %>%
+
+  select(mtabName, starts_with("CMP")) %>%
+
+  pivot_longer(-mtabName, names_to = "Sample", values_to = "Log2FC")
 
 ```{r}
 # Plot
@@ -183,7 +196,7 @@ p_fc <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
   theme(
     plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
     axis.title = element_text(face = "bold", size = 16),
-
+    plot.subtitle = element_text(hjust = 0.5, size = 14),
     axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
     axis.text.y = element_text(size = 11),
 
