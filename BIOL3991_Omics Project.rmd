@@ -115,19 +115,17 @@ p <- ggplot(long, aes(x = sample_disp, y = mtabName, fill = log10_conc)) +
   scale_y_discrete(expand = c(0, 0)) +
   labs(
     title = "Metabolite Concentrations Heatmap",
-    x = "Sample",
+    x = "Treatment and Replicate",
     y = "Metabolites",
-    fill = "log10(Concentration + 1e-12)"
+    fill = "Log 10 (concentration + 1e-12)"
   ) +
 #  theme_void() +
   theme(
 #   panel.grid = element_blank(),
     plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
     axis.title = element_text(face = "bold", size = 16),
-
-    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
-    axis.text.y = element_text(size = 11),
-
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12, color = "black"),
+    axis.text.y = element_text(size = 11, color = "black"),
     legend.title = element_text(size = 13),
     legend.text  = element_text(size = 12),
 
@@ -137,21 +135,26 @@ p <- ggplot(long, aes(x = sample_disp, y = mtabName, fill = log10_conc)) +
 p
 
 ggsave("metabolite_heatmap_log10.png",p, width = 12, height = 8, dpi = 300)
+
 ```
 
 # Figure 2
 ```{r Thuy ver, get rid of 0 in cal}
 # Control group name (change this if your control is different)
 control_group <- "repl"
-
-# Same pseudocount idea as before (prevents log(0) + division by 0)
 pseudo <- 1e-12
 
+# Same pseudocount idea as before (prevents log(0) + division by 0)
 fc_long <- long %>%
   group_by(mtabName) %>%
   mutate(
+    n_ctrl_detected = sum(conc[Condition == control_group] > 0, na.rm = TRUE),
     control_mean = mean(conc[Condition == control_group], na.rm = TRUE),
-    log2FC = log2((conc + pseudo) / (control_mean + pseudo))
+    log2FC = if_else(
+      n_ctrl_detected == 0,
+      NA_real_,
+      log2((conc + pseudo) / (control_mean + pseudo))
+    )
   ) %>%
   ungroup()
 
@@ -159,7 +162,6 @@ fc_long <- long %>%
 
 
 Sydney ver, include 0 
-
 df_log2fc <- df %>%
 
   mutate(control_mean = rowMeans(select(., contains("repl")), na.rm = TRUE)) %>%
@@ -169,6 +171,18 @@ df_log2fc <- df %>%
   select(mtabName, starts_with("CMP")) %>%
 
   pivot_longer(-mtabName, names_to = "Sample", values_to = "Log2FC")
+  
+ggplot(df_log2fc, aes(x = Sample, y = mtabName, fill = Log2FC)) +
+  geom_tile(color = "white", linewidth = 0.1) +
+  geom_vline(xintercept = c(3.5, 6.5), color = "black", linewidth = 0.5) +
+  scale_fill_gradient2(low = "pink", mid = "white", high = "red", 
+                       midpoint = 0, limit = c(-8, 8), oob = scales::squish) +
+  theme_minimal() +
+  labs(title = "Differential Metabolic Profiles",
+       subtitle = "Log2 Fold Change relative to Control (repl) mean",
+       x = "Samples", y = "Metabolites") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        axis.text.y = element_text(size = 7))
 
 ```{r}
 # Plot
@@ -188,8 +202,8 @@ p_fc <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
   scale_y_discrete(expand = c(0, 0)) +
   labs(
     title = "Different Metabolic Profiles",
-    subtitle = "Log2 Fold Change relative to Control (repl) mean",
-    x = "Sample",
+    subtitle = "Log2 Fold Change relative to control group mean",
+    x = "Treatment and Replicate",
     y = "Metabolites",
     fill = "log2FC"
   ) +
@@ -197,12 +211,10 @@ p_fc <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
     plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
     axis.title = element_text(face = "bold", size = 16),
     plot.subtitle = element_text(hjust = 0.5, size = 14),
-    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
-    axis.text.y = element_text(size = 11),
-
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12, , color = "black"),
+    axis.text.y = element_text(size = 11, color = "black"),
     legend.title = element_text(size = 13),
     legend.text  = element_text(size = 12),
-
     plot.margin = margin(10, 15, 10, 10)
   )
 
