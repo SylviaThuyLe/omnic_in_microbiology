@@ -36,9 +36,12 @@ hits <- list.files(path.expand("~/Library/CloudStorage"),
 #                 recursive=TRUE,
 #                 full. Names=TRUE)
 
-hits # You will see your file path here 
+# You will see your file path here 
+hits 
 
-# Paste your file path in ""
+```
+```{r set up data in environment}
+# Paste your file path in ("")
 xlsx_path <- path.expand("/Users/kyoshiinari/Library/CloudStorage/OneDrive-MountAllisonUniversity/BIOL 3991_Omics data/prodatawithCELLCOUNTS.xlsx")
 
 sheets <- excel_sheets(xlsx_path)
@@ -46,17 +49,17 @@ raw_data <- setNames(map(sheets, ~ read_excel(xlsx_path, sheet = .x)), sheets)
 print(raw_data)
 ```
 
+
 ## Figure
 
-
-```{r Thuy ver}
-# ---- Pick the sheet containing metabolite data ----
+```{r transform data and log 10 transform}
+# Pick the sheet containing metabolite data
 sheet_name <- names(raw_data)[purrr::map_lgl(raw_data, ~ "mtabName" %in% names(.x))][1]
 
 df <- raw_data[[sheet_name]] %>%
   tibble::as_tibble()
 
-# ---- Set repl_A to NA only for these 5 metabolites ----
+# Set repl_A to NA only for these 5 metabolites 
 na_replA_mets <- c(
   "glutamic acid pos",
   "glutamine",
@@ -73,10 +76,10 @@ df <- df %>%
       as.numeric(CMP032_MIT9301_repl_A)
     )
   )
-# ---- Identify sample columns ----
+# Identify sample columns 
 sample_cols <- grep("^CMP032", names(df), value = TRUE)
 
-# ---- Convert to long format ----
+# Convert to long format
 long <- df %>%
   select(mtabName, all_of(sample_cols)) %>%
   pivot_longer(-mtabName, names_to = "sample", values_to = "conc") %>%
@@ -92,7 +95,7 @@ long <- df %>%
     Replicate = factor(Replicate, levels = c("A", "B", "C"))
   )
 
-# ---- Order samples and metabolites ----
+#  Order samples and metabolites
 sample_levels <- long %>%
   distinct(sample_disp, Condition, Replicate) %>%
   arrange(Condition, Replicate) %>%
@@ -106,7 +109,7 @@ long <- long %>%
     mtabName = factor(mtabName, levels = met_levels)
   )
 
-# ---- log10 transform ----
+# log10 transform 
 long_log10 <- long %>%
   mutate(log10_conc = log10(conc + 1e-12))
 
@@ -154,9 +157,11 @@ ggsave("metabolite_heatmap_log10.png",p_log10, width = 12, height = 8, dpi = 300
 
 # Figure 2
 ```{r Thuy ver}
+#
 control_group <- "repl"
 pseudo <- 1e-12
 
+# Calculated log2 fc
 fc_long <- long %>%
   group_by(mtabName) %>%
   mutate(
@@ -168,7 +173,7 @@ fc_long <- long %>%
 ```
 
 
-Sydney ver, include 0 
+Sydney ver 
 df_log2fc <- df %>%
 
   mutate(control_mean = rowMeans(select(., contains("repl")), na.rm = TRUE)) %>%
@@ -191,7 +196,7 @@ ggplot(df_log2fc, aes(x = Sample, y = mtabName, fill = Log2FC)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
         axis.text.y = element_text(size = 7))
 
-```{r}
+```{r Log 2 FC normal map}
 # Plot (set limit from -5.0 to 5.0)
 max_abs <- max(abs(fc_long$log2FC), na.rm = TRUE)
 
@@ -229,7 +234,7 @@ p_fc
 
 ggsave("metabolite_heatmap_log2fc.png", p_fc, width = 10, height = 8, dpi = 300)
 
-# Plot (set limit as normal)
+# Plot (same as Sydney setting)
 p_fc2 <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
   geom_tile(color = "white", linewidth = 0.25) +
   geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
@@ -260,7 +265,7 @@ p_fc2 <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
 
 p_fc2
 
-# Plot (same as Sydney setting)
+# Plot (set limit as normal)
 p_fc3 <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
   geom_tile(color = "white", linewidth = 0.25) +
   geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
@@ -297,14 +302,17 @@ p_fc3
 ```
 
 ```{r Column-normalized data}
+#
 mat <- df %>%
   select(all_of(sample_cols)) %>%
   mutate(across(everything(), as.numeric)) %>%
   as.matrix()
 
+#
 col_z <- scale(mat, center = TRUE, scale = TRUE)
 col_z[is.nan(col_z)] <- NA
 
+#
 col_z_long <- as_tibble(as.data.frame(col_z, check.names = FALSE)) %>%
   mutate(mtabName = df$mtabName, .before = 1) %>%
   pivot_longer(-mtabName, names_to = "sample", values_to = "z_score") %>%
@@ -322,7 +330,7 @@ col_z_long <- as_tibble(as.data.frame(col_z, check.names = FALSE)) %>%
   )
 ```
 
-```{r Column-normalized heatmap}
+```{r Log 2 FC column-normalized heatmap}
 max_abs_col <- max(abs(col_z_long$z_score), na.rm = TRUE)
 
 p_col <- ggplot(col_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) +
@@ -358,9 +366,11 @@ ggsave("metabolite_heatmap_column_normalized.png", p_col, width = 10, height = 8
 ```
 
 ```{r Row-normalize data}
+#
 row_z <- t(scale(t(mat), center = TRUE, scale = TRUE))
 row_z[is.nan(row_z)] <- NA
 
+#
 row_z_long <- as_tibble(as.data.frame(row_z, check.names = FALSE)) %>%
   mutate(mtabName = df$mtabName, .before = 1) %>%
   pivot_longer(-mtabName, names_to = "sample", values_to = "z_score") %>%
@@ -378,7 +388,7 @@ row_z_long <- as_tibble(as.data.frame(row_z, check.names = FALSE)) %>%
   )
 ```
 
-```{r Row-normalize heatmap}
+```{r Log 2 FC row-normalize heatmap}
 max_abs_row <- max(abs(row_z_long$z_score), na.rm = TRUE)
 
 p_row <- ggplot(row_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) +
