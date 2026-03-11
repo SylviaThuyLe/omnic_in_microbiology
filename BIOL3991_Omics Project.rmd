@@ -49,24 +49,39 @@ print(raw_data)
 ## Figure
 
 
-```{r Thuy ver, get rid of 0}
+```{r Thuy ver}
+# ---- Pick the sheet containing metabolite data ----
+sheet_name <- names(raw_data)[purrr::map_lgl(raw_data, ~ "mtabName" %in% names(.x))][1]
 
-# ---- 1) Pick the sheet that contains the metabolite table ----
-# (This auto-picks the first sheet that has a "mtabName" column)
-sheet_name <- names(raw_data)[map_lgl(raw_data, ~ "mtabName" %in% names(.x))][1]
-df <- raw_data[[sheet_name]]
+df <- raw_data[[sheet_name]] %>%
+  tibble::as_tibble()
 
-# ---- 2) Identify sample columns (all CMP032* columns) ----
+# ---- Set repl_A to NA only for these 5 metabolites ----
+na_replA_mets <- c(
+  "glutamic acid pos",
+  "glutamine",
+  "sucrose pos",
+  "threonine (isom. homoserine)",
+  "DMSP"
+)
+
+df <- df %>%
+  mutate(
+    CMP032_MIT9301_repl_A = if_else(
+      mtabName %in% na_replA_mets,
+      NA_real_,
+      as.numeric(CMP032_MIT9301_repl_A)
+    )
+  )
+# ---- Identify sample columns ----
 sample_cols <- grep("^CMP032", names(df), value = TRUE)
 
-# ---- 3) Long format + log10 transform (exactly: log10(conc + 1e-12)) ----
-# Also: turn 0 into NA so it plots as blank (white)
+# ---- Convert to long format ----
 long <- df %>%
   select(mtabName, all_of(sample_cols)) %>%
   pivot_longer(-mtabName, names_to = "sample", values_to = "conc") %>%
   mutate(
     conc = as.numeric(conc),
-    conc = na_if(conc, 0),  # make zeros blank on heatmap
     sample_disp = sample %>%
       str_replace_all("\\.+", "_") %>%
       str_replace_all("__+", "_") %>%
@@ -74,17 +89,15 @@ long <- df %>%
     Condition = str_extract(sample_disp, "repl|lown|lowp"),
     Replicate = str_extract(sample_disp, "(?<=_)[A-Za-z]$"),
     Condition = factor(Condition, levels = c("repl", "lown", "lowp")),
-    Replicate = factor(Replicate, levels = c("A", "B", "C")),
-    log10_conc = log10(conc + 1e-12)  # <- this is where raw becomes log10
+    Replicate = factor(Replicate, levels = c("A", "B", "C"))
   )
 
-# Keep sample order: repl A/B/C, lown A/B/C, lowp A/B/C
+# ---- Order samples and metabolites ----
 sample_levels <- long %>%
   distinct(sample_disp, Condition, Replicate) %>%
   arrange(Condition, Replicate) %>%
   pull(sample_disp)
 
-# Keep metabolite order like your table, but flipped so first row ends up at bottom
 met_levels <- rev(unique(df$mtabName))
 
 long <- long %>%
@@ -93,68 +106,62 @@ long <- long %>%
     mtabName = factor(mtabName, levels = met_levels)
   )
 
-# Optional: set legend range similar to your screenshot (so the scale looks comparable)
-lims <- range(long$log10_conc, na.rm = TRUE)
-lims <- c(min(lims[1], -10), max(lims[2], -2.5))
+# ---- log10 transform ----
+long_log10 <- long %>%
+  mutate(log10_conc = log10(conc + 1e-12))
+
+lims_log10 <- range(long_log10$log10_conc, na.rm = TRUE)
 
 ```
  
 
-```{r heat map}
+```{r heat map log 10}
 # Plot
-p <- ggplot(long, aes(x = sample_disp, y = mtabName, fill = log10_conc)) +
+p_log10 <- ggplot(long_log10, aes(x = sample_disp, y = mtabName, fill = log10_conc)) +
   geom_tile() +
   geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
-  scale_fill_viridis_c(option = "F", direction = -1, 
-    na.value = "white",
+  scale_fill_viridis_c(
+    option = "F",
+    direction = -1,
     begin = 0.20,
-    limits = lims,
-    breaks = c(-2.5, -5, -7.5, -10)
-) +  
+    limits = lims_log10,
+    breaks = c(-2.5, -5, -7.5, -10, -12),
+    na.value = "grey"
+  ) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
   labs(
-    title = "Metabolite Concentrations Heatmap",
+    title = "Metabolite Concentration Profiles Across Nutrient Treatments",
     x = "Treatment and Replicate",
-    y = "Metabolites",
-    fill = "Log 10 (concentration + 1e-12)"
+    y = "Metabolite",
+    fill = "log10(Concentration + 1e-12)"
   ) +
-#  theme_void() +
   theme(
-#   panel.grid = element_blank(),
     plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
     axis.title = element_text(face = "bold", size = 16),
-    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12, color = "black"),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
     axis.text.y = element_text(size = 11, color = "black"),
     legend.title = element_text(size = 13),
-    legend.text  = element_text(size = 12),
-
+    legend.text = element_text(size = 12),
     plot.margin = margin(10, 15, 10, 10)
   )
 
-p
+p_log10
 
-ggsave("metabolite_heatmap_log10.png",p, width = 12, height = 8, dpi = 300)
+ggsave("metabolite_heatmap_log10.png",p_log10, width = 12, height = 8, dpi = 300)
 
 ```
 
 # Figure 2
-```{r Thuy ver, get rid of 0 in cal}
-# Control group name (change this if your control is different)
+```{r Thuy ver}
 control_group <- "repl"
 pseudo <- 1e-12
 
-# Same pseudocount idea as before (prevents log(0) + division by 0)
 fc_long <- long %>%
   group_by(mtabName) %>%
   mutate(
-    n_ctrl_detected = sum(conc[Condition == control_group] > 0, na.rm = TRUE),
     control_mean = mean(conc[Condition == control_group], na.rm = TRUE),
-    log2FC = if_else(
-      n_ctrl_detected == 0,
-      NA_real_,
-      log2((conc + pseudo) / (control_mean + pseudo))
-    )
+    log2FC = log2((conc + pseudo) / (control_mean + pseudo))
   ) %>%
   ungroup()
 
@@ -185,7 +192,7 @@ ggplot(df_log2fc, aes(x = Sample, y = mtabName, fill = Log2FC)) +
         axis.text.y = element_text(size = 7))
 
 ```{r}
-# Plot
+# Plot (set limit from -5.0 to 5.0)
 max_abs <- max(abs(fc_long$log2FC), na.rm = TRUE)
 
 p_fc <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
@@ -194,8 +201,8 @@ p_fc <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
   scale_fill_distiller(
   palette = "RdBu",
     direction = -1,
-    limits = c(-max_abs, max_abs),
-    na.value = "white"
+    limit = c(-5.0, 5.0), oob = scales::squish,
+    na.value = "grey"
 ) +
   labs(fill = "log2FC") +
   scale_x_discrete(expand = c(0, 0)) +
@@ -221,7 +228,188 @@ p_fc <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
 p_fc
 
 ggsave("metabolite_heatmap_log2fc.png", p_fc, width = 10, height = 8, dpi = 300)
+
+# Plot (set limit as normal)
+p_fc2 <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
+  geom_tile(color = "white", linewidth = 0.25) +
+  geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
+ geom_vline(xintercept = c(3.5, 6.5), color = "black", linewidth = 0.5) +
+  scale_fill_gradient2(low = "pink", mid = "white", high = "red", 
+                       midpoint = 0, limit = c(-5.0, 5.0), oob = scales::squish, na.value = "grey"
+) +
+  labs(fill = "log2FC") +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(
+    title = "Different Metabolic Profiles",
+    subtitle = "Log2 Fold Change relative to control group mean",
+    x = "Treatment and Replicate",
+    y = "Metabolites",
+    fill = "log2FC"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
+    axis.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12, , color = "black"),
+    axis.text.y = element_text(size = 11, color = "black"),
+    legend.title = element_text(size = 13),
+    legend.text  = element_text(size = 12),
+    plot.margin = margin(10, 15, 10, 10)
+  )
+
+p_fc2
+
+# Plot (same as Sydney setting)
+p_fc3 <- ggplot(fc_long, aes(x = sample_disp, y = mtabName, fill = log2FC)) +
+  geom_tile(color = "white", linewidth = 0.25) +
+  geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
+  scale_fill_distiller(
+  palette = "RdBu",
+    direction = -1,
+    limit = c(-max_abs,max_abs), oob = scales::squish,
+    na.value = "grey"
+) +
+  labs(fill = "log2FC") +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(
+    title = "Different Metabolic Profiles",
+    subtitle = "Log2 Fold Change relative to control group mean",
+    x = "Treatment and Replicate",
+    y = "Metabolites",
+    fill = "log2FC"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
+    axis.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12, , color = "black"),
+    axis.text.y = element_text(size = 11, color = "black"),
+    legend.title = element_text(size = 13),
+    legend.text  = element_text(size = 12),
+    plot.margin = margin(10, 15, 10, 10)
+  )
+
+p_fc3
+
+
 ```
 
+```{r Column-normalized data}
+mat <- df %>%
+  select(all_of(sample_cols)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  as.matrix()
 
+col_z <- scale(mat, center = TRUE, scale = TRUE)
+col_z[is.nan(col_z)] <- NA
+
+col_z_long <- as_tibble(as.data.frame(col_z, check.names = FALSE)) %>%
+  mutate(mtabName = df$mtabName, .before = 1) %>%
+  pivot_longer(-mtabName, names_to = "sample", values_to = "z_score") %>%
+  mutate(
+    sample_disp = sample %>%
+      str_replace_all("\\.+", "_") %>%
+      str_replace_all("__+", "_") %>%
+      str_replace_all("_$", ""),
+    Condition = str_extract(sample_disp, "repl|lown|lowp"),
+    Replicate = str_extract(sample_disp, "(?<=_)[A-Za-z]$"),
+    Condition = factor(Condition, levels = c("repl", "lown", "lowp")),
+    Replicate = factor(Replicate, levels = c("A", "B", "C")),
+    sample_disp = factor(sample_disp, levels = sample_levels),
+    mtabName = factor(mtabName, levels = met_levels)
+  )
+```
+
+```{r Column-normalized heatmap}
+max_abs_col <- max(abs(col_z_long$z_score), na.rm = TRUE)
+
+p_col <- ggplot(col_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) +
+  geom_tile(color = "white", linewidth = 0.25) +
+  geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
+  scale_fill_distiller(
+    palette = "RdBu",
+    direction = -1,
+    limits = c(-max_abs_col, max_abs_col),
+    na.value = "white"
+  ) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(
+    title = "Column-normalized Metabolite Heatmap",
+    x = "Treatment and Replicate",
+    y = "Metabolite",
+    fill = "Column z-score"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
+    axis.title = element_text(face = "bold", size = 16),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
+    axis.text.y = element_text(size = 11),
+    legend.title = element_text(size = 13),
+    legend.text = element_text(size = 12),
+    plot.margin = margin(10, 15, 10, 10)
+  )
+
+p_col
+
+ggsave("metabolite_heatmap_column_normalized.png", p_col, width = 10, height = 8, dpi = 300)
+```
+
+```{r Row-normalize data}
+row_z <- t(scale(t(mat), center = TRUE, scale = TRUE))
+row_z[is.nan(row_z)] <- NA
+
+row_z_long <- as_tibble(as.data.frame(row_z, check.names = FALSE)) %>%
+  mutate(mtabName = df$mtabName, .before = 1) %>%
+  pivot_longer(-mtabName, names_to = "sample", values_to = "z_score") %>%
+  mutate(
+    sample_disp = sample %>%
+      str_replace_all("\\.+", "_") %>%
+      str_replace_all("__+", "_") %>%
+      str_replace_all("_$", ""),
+    Condition = str_extract(sample_disp, "repl|lown|lowp"),
+    Replicate = str_extract(sample_disp, "(?<=_)[A-Za-z]$"),
+    Condition = factor(Condition, levels = c("repl", "lown", "lowp")),
+    Replicate = factor(Replicate, levels = c("A", "B", "C")),
+    sample_disp = factor(sample_disp, levels = sample_levels),
+    mtabName = factor(mtabName, levels = met_levels)
+  )
+```
+
+```{r Row-normalize heatmap}
+max_abs_row <- max(abs(row_z_long$z_score), na.rm = TRUE)
+
+p_row <- ggplot(row_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) +
+  geom_tile(color = "white", linewidth = 0.25) +
+  geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
+  scale_fill_distiller(
+    palette = "RdBu",
+    direction = -1,
+    limits = c(-max_abs_row, max_abs_row),
+    na.value = "white"
+  ) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(
+    title = "Row-normalized Metabolite Heatmap",
+    x = "Treatment and Replicate",
+    y = "Metabolite",
+    fill = "Row z-score"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
+    axis.title = element_text(face = "bold", size = 16),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
+    axis.text.y = element_text(size = 11),
+    legend.title = element_text(size = 13),
+    legend.text = element_text(size = 12),
+    plot.margin = margin(10, 15, 10, 10)
+  )
+
+p_row
+
+ggsave("metabolite_heatmap_row_normalized.png", p_row, width = 10, height = 8, dpi = 300)
+```
 
