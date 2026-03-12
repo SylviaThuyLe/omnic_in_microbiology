@@ -1,6 +1,6 @@
 ---
 title: "BIOL 3991_Omics Project"
-author: "Thuy Le"
+author: "Thuy Le, Sydney McLean"
 date: "2026-02-25"
 output: html_document
 ---
@@ -49,8 +49,7 @@ raw_data <- setNames(map(sheets, ~ read_excel(xlsx_path, sheet = .x)), sheets)
 print(raw_data)
 ```
 
-
-## Figure
+## Figure 1: Log 10
 
 ```{r transform data and log 10 transform}
 # Pick the sheet containing metabolite data
@@ -61,7 +60,7 @@ df <- raw_data[[sheet_name]] %>%
 
 # Set repl_A to NA only for these 5 metabolites 
 na_replA_mets <- c(
-  "glutamic acid pos",
+  "glutamic acid pos", 
   "glutamine",
   "sucrose pos",
   "threonine (isom. homoserine)",
@@ -89,13 +88,13 @@ long <- df %>%
       str_replace_all("\\.+", "_") %>%
       str_replace_all("__+", "_") %>%
       str_replace_all("_$", ""),
-    Condition = str_extract(sample_disp, "repl|lown|lowp"),
-    Replicate = str_extract(sample_disp, "(?<=_)[A-Za-z]$"),
-    Condition = factor(Condition, levels = c("repl", "lown", "lowp")),
+    Condition = str_extract(sample_disp, "repl|lown|lowp"),   # Extract the treatment group from the sample name
+    Replicate = str_extract(sample_disp, "(?<=_)[A-Za-z]$"),  # Extract replicate letter (A, B, or C) from the end of the sample name
+    Condition = factor(Condition, levels = c("repl", "lown", "lowp")),  # Set factor order so the samples appear in the desired order later
     Replicate = factor(Replicate, levels = c("A", "B", "C"))
   )
 
-#  Order samples and metabolites
+#  Order samples and metabolites, forces the samples to plot in the order
 sample_levels <- long %>%
   distinct(sample_disp, Condition, Replicate) %>%
   arrange(Condition, Replicate) %>%
@@ -103,6 +102,7 @@ sample_levels <- long %>%
 
 met_levels <- rev(unique(df$mtabName))
 
+# Apply the chosen factor order
 long <- long %>%
   mutate(
     sample_disp = factor(sample_disp, levels = sample_levels),
@@ -119,7 +119,7 @@ lims_log10 <- range(long_log10$log10_conc, na.rm = TRUE)
  
 
 ```{r heat map log 10}
-# Plot
+# Plot 
 p_log10 <- ggplot(long_log10, aes(x = sample_disp, y = mtabName, fill = log10_conc)) +
   geom_tile() +
   geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
@@ -155,9 +155,9 @@ ggsave("metabolite_heatmap_log10.png",p_log10, width = 12, height = 8, dpi = 300
 
 ```
 
-# Figure 2
-```{r Thuy ver}
-#
+# Figure 2: Log 2 Fold Change
+```{r Log 2 FC data calculate}
+# Set the control group and pseudocount, the pseudocount prevents division by zero when concentrations are 0
 control_group <- "repl"
 pseudo <- 1e-12
 
@@ -302,17 +302,18 @@ p_fc3
 ```
 
 ```{r Column-normalized data}
-#
+# Build a numeric matrix from the sample columns
 mat <- df %>%
   select(all_of(sample_cols)) %>%
   mutate(across(everything(), as.numeric)) %>%
   as.matrix()
 
-#
+# Normalize across columns. This standardizes each sample column separately
 col_z <- scale(mat, center = TRUE, scale = TRUE)
-col_z[is.nan(col_z)] <- NA
+# If a column has no variation, scale() can produce Na. Convert those to NA so they plot as blank
+col_z[is.nan(col_z)] <- NA  
 
-#
+# Convert back to long format
 col_z_long <- as_tibble(as.data.frame(col_z, check.names = FALSE)) %>%
   mutate(mtabName = df$mtabName, .before = 1) %>%
   pivot_longer(-mtabName, names_to = "sample", values_to = "z_score") %>%
@@ -331,8 +332,10 @@ col_z_long <- as_tibble(as.data.frame(col_z, check.names = FALSE)) %>%
 ```
 
 ```{r Log 2 FC column-normalized heatmap}
+#
 max_abs_col <- max(abs(col_z_long$z_score), na.rm = TRUE)
 
+# Plot heatmap
 p_col <- ggplot(col_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) +
   geom_tile(color = "white", linewidth = 0.25) +
   geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
@@ -389,8 +392,10 @@ row_z_long <- as_tibble(as.data.frame(row_z, check.names = FALSE)) %>%
 ```
 
 ```{r Log 2 FC row-normalize heatmap}
+#
 max_abs_row <- max(abs(row_z_long$z_score), na.rm = TRUE)
 
+# Plot heatmap
 p_row <- ggplot(row_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) +
   geom_tile(color = "white", linewidth = 0.25) +
   geom_vline(xintercept = c(3.5, 6.5), linewidth = 1, color = "black") +
