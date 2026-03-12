@@ -343,7 +343,7 @@ p_col <- ggplot(col_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) 
     palette = "RdBu",
     direction = -1,
     limits = c(-max_abs_col, max_abs_col),
-    na.value = "white"
+    na.value = "grey"
   ) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
@@ -351,7 +351,7 @@ p_col <- ggplot(col_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) 
     title = "Column-normalized Metabolite Heatmap",
     x = "Treatment and Replicate",
     y = "Metabolite",
-    fill = "Column z-score"
+    fill = "z-score"
   ) +
   theme(
     plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
@@ -403,7 +403,7 @@ p_row <- ggplot(row_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) 
     palette = "RdBu",
     direction = -1,
     limits = c(-max_abs_row, max_abs_row),
-    na.value = "white"
+    na.value = "grey"
   ) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
@@ -411,7 +411,7 @@ p_row <- ggplot(row_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) 
     title = "Row-normalized Metabolite Heatmap",
     x = "Treatment and Replicate",
     y = "Metabolite",
-    fill = "Row z-score"
+    fill = "z-score"
   ) +
   theme(
     plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
