@@ -342,7 +342,8 @@ p_col <- ggplot(col_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) 
   scale_fill_distiller(
     palette = "RdBu",
     direction = -1,
-    limits = c(-max_abs_col, max_abs_col),
+#    limits = c(-max_abs_col, max_abs_col),
+    limit = c(-3.0, 3.0), oob = scales::squish,
     na.value = "grey"
   ) +
   scale_x_discrete(expand = c(0, 0)) +
