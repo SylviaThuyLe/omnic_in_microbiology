@@ -10,8 +10,10 @@ library(readxl)
 library(purrr)
 library(tidyverse)
 library(stringr)
+library(grid)
 library(dplyr)  
 library(paletteer)
+library(pheatmap)
 ```
 
 # Sync the excel file to OneDrive
@@ -67,14 +69,13 @@ na_replA_mets <- c(
   "DMSP"
 )
 
-df <- df %>%
-  mutate(
-    CMP032_MIT9301_repl_A = if_else(
-      mtabName %in% na_replA_mets,
-      NA_real_,
-      as.numeric(CMP032_MIT9301_repl_A)
-    )
-  )
+df <- df %>% 
+  mutate( CMP032_MIT9301_repl_A = if_else ( 
+          mtabName %in% na_replA_mets, 
+          NA_real_, 
+          as.numeric(CMP032_MIT9301_repl_A) 
+          ) 
+        )
 # Identify sample columns 
 sample_cols <- grep("^CMP032", names(df), value = TRUE)
 
@@ -343,7 +344,7 @@ p_col <- ggplot(col_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) 
     palette = "RdBu",
     direction = -1,
 #    limits = c(-max_abs_col, max_abs_col),
-    limit = c(-3.0, 3.0), oob = scales::squish,
+    limit = c(-1.7, 1.7), oob = scales::squish,
     na.value = "grey"
   ) +
   scale_x_discrete(expand = c(0, 0)) +
@@ -427,5 +428,191 @@ p_row <- ggplot(row_z_long, aes(x = sample_disp, y = mtabName, fill = z_score)) 
 p_row
 
 ggsave("metabolite_heatmap_row_normalized.png", p_row, width = 10, height = 8, dpi = 300)
+```
+
+# Heat map + dendrogram:
+
+```{r Heatmap with dendrogram add data making}
+# ---- Prepare row-normalized matrix for dendrogram heatmap ----
+
+# Build numeric matrix from the sample columns
+mat_dend <- df %>%
+  select(all_of(sample_cols)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  as.matrix()
+
+# Use metabolite names as row names
+rownames(mat_dend) <- df$mtabName
+
+# Clean sample names so they match the sample order used earlier
+colnames(mat_dend) <- colnames(mat_dend) %>%
+  str_replace_all("\\.+", "_") %>%
+  str_replace_all("__+", "_") %>%
+  str_replace_all("_$", "")
+
+# Keep columns in biological order: repl, lown, lowp
+mat_dend <- mat_dend[, sample_levels, drop = FALSE]
+
+# Remove metabolites with zero variation across samples
+# These cannot be meaningfully z-scored or clustered
+row_sd <- apply(mat_dend, 1, function(x) sd(x, na.rm = TRUE))
+mat_dend <- mat_dend[!is.na(row_sd) & row_sd > 0, , drop = FALSE]
+
+# Row-normalize: z-score each metabolite across samples
+row_z_display <- t(scale(t(mat_dend), center = TRUE, scale = TRUE))
+
+# Keep NA values in the display matrix so they plot as gray
+row_z_display[is.nan(row_z_display)] <- NA
+
+# Make a second copy only for clustering
+# Replace NA with 0 here so hierarchical clustering can run
+row_z_for_cluster <- row_z_display
+row_z_for_cluster[is.na(row_z_for_cluster)] <- 0
+
+# Build the row dendrogram
+row_hc <- hclust(dist(row_z_for_cluster), method = "complete")
+
+# Clip z-scores for plotting so the colors are easier to read
+row_z_plot <- row_z_display
+row_z_plot[row_z_plot > 2] <- 2
+row_z_plot[row_z_plot < -2] <- -2
+```
+
+```{r Column normalize heat map + dendrogram}
+# Column annotations
+annotation_col <- data.frame(
+  Treatment = c("repl", "repl", "repl", "lown", "lown", "lown", "lowp", "lowp", "lowp"),
+  Replicate = c("A", "B", "C", "A", "B", "C", "A", "B", "C")
+)
+
+rownames(annotation_col) <- sample_levels
+
+# Choose cleaner annotation colors
+annotation_colors <- list(
+  Treatment = c(
+    repl = "#7AA6DC",
+    lown = "#C77CFF",
+    lowp = "#F4A582"
+  ),
+  Replicate = c(
+    A = "#81A665",
+    B = "#FFD92F",
+    C = "#E87687"
+  )
+)
+
+# Use the same RdBu-style palette as your ggplot heatmaps
+hm_cols <- colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(100)
+hm_breaks <- seq(-2, 2, length.out = 101)
+
+pheatmap(
+  row_z_plot,
+  color = hm_cols,
+  breaks = hm_breaks,
+  cluster_rows = row_hc,
+  cluster_cols = FALSE,
+  gaps_col = c(3, 6),
+  annotation_col = annotation_col,
+  annotation_colors = annotation_colors,
+  na_col = "grey",
+  border_color = "white",
+  fontsize_row = 9,
+  fontsize_col = 10,
+  angle_col = "45",
+  cellheight = 15,
+  cellwidth = 30,
+  treeheight_row = 110,
+  treeheight_col = 0,
+  legend_breaks = c(-2, -1, 0, 1, 2),
+  legend_labels = c("-2", "-1", "0", "1", "2"),
+  main = "Row-normalized Metabolite Heatmap with Dendrogram"
+)
+```
+
+```{r fig.width = 12, fig.height = 8}
+# ---- Build wide matrix for log10 heatmap with dendrogram ----
+
+# Start from the sample columns only
+mat_log10 <- df %>%
+  select(all_of(sample_cols)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  as.matrix()
+
+# Add metabolite names as row names
+rownames(mat_log10) <- df$mtabName
+
+# Clean sample names so they match your plotting order
+colnames(mat_log10) <- colnames(mat_log10) %>%
+  str_replace_all("\\.+", "_") %>%
+  str_replace_all("__+", "_") %>%
+  str_replace_all("_$", "")
+
+# Keep columns in treatment order
+mat_log10 <- mat_log10[, sample_levels, drop = FALSE]
+
+# Log10 transform
+# 0 stays in the data and becomes log10(0 + 1e-12) = -12
+# NA stays NA
+log10_display <- log10(mat_log10 + 1e-12)
+
+# Make a second version only for clustering
+# Replace NA with row mean so dendrogram can be computed
+log10_for_cluster <- log10_display
+
+for (i in seq_len(nrow(log10_for_cluster))) {
+  row_vals <- log10_for_cluster[i, ]
+  row_mean <- mean(row_vals, na.rm = TRUE)
+  if (is.nan(row_mean)) row_mean <- -12
+  row_vals[is.na(row_vals)] <- row_mean
+  log10_for_cluster[i, ] <- row_vals
+}
+
+# Remove rows with zero variation after imputation
+row_sd_log10 <- apply(log10_for_cluster, 1, sd, na.rm = TRUE)
+keep_log10 <- !is.na(row_sd_log10) & row_sd_log10 > 0
+
+log10_display <- log10_display[keep_log10, , drop = FALSE]
+log10_for_cluster <- log10_for_cluster[keep_log10, , drop = FALSE]
+
+# Build row dendrogram
+row_hc_log10 <- hclust(dist(log10_for_cluster), method = "complete")
+```
+
+```{r}
+# Column annotations 
+annotation_col <- data.frame(
+  Treatment = c("repl", "repl", "repl", "lown", "lown", "lown", "lowp", "lowp", "lowp"),
+  Replicate = c("A", "B", "C", "A", "B", "C", "A", "B", "C")
+)
+
+rownames(annotation_col) <- sample_levels
+
+# Viridis-like palette for log10
+log10_cols <- viridisLite::viridis(100, option = "F", direction = -1, begin = 0.20)
+log10_breaks <- seq(min(log10_display, na.rm = TRUE), max(-2.0), length.out = 101)
+
+png("metabolite_heatmap_log10_dendrogram.png" , width = 2400, height = 1600, res = 200)
+
+pheatmap(
+  log10_display,
+  color = log10_cols,
+  breaks = log10_breaks,
+  cluster_rows = row_hc_log10,
+  cluster_cols = FALSE,
+  gaps_col = c(3, 6),
+  annotation_col = annotation_col,
+  annotation_colors = annotation_colors,
+  na_col = "grey",
+  border_color = "white",
+  fontsize_row = 9,
+  fontsize_col = 10,
+  angle_col = "45",
+  treeheight_row = 120,
+  cellwidth = 30,
+  cellheight = 13,
+  treeheight_col = 0,
+  main = "Log10 Metabolite Heatmap"
+)
+
 ```
 
