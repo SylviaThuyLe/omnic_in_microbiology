@@ -432,8 +432,8 @@ ggsave("metabolite_heatmap_row_normalized.png", p_row, width = 10, height = 8, d
 
 # Heat map + dendrogram:
 
-```{r Heatmap with dendrogram add data making}
-# ---- Prepare row-normalized matrix for dendrogram heatmap ----
+```{r Row normalize Heatmap with dendrogram add data making}
+# Prepare row-normalized matrix for dendrogram heatmap
 
 # Build numeric matrix from the sample columns
 mat_dend <- df %>%
@@ -453,10 +453,6 @@ colnames(mat_dend) <- colnames(mat_dend) %>%
 # Keep columns in biological order: repl, lown, lowp
 mat_dend <- mat_dend[, sample_levels, drop = FALSE]
 
-# Remove metabolites with zero variation across samples
-# These cannot be meaningfully z-scored or clustered
-row_sd <- apply(mat_dend, 1, function(x) sd(x, na.rm = TRUE))
-mat_dend <- mat_dend[!is.na(row_sd) & row_sd > 0, , drop = FALSE]
 
 # Row-normalize: z-score each metabolite across samples
 row_z_display <- t(scale(t(mat_dend), center = TRUE, scale = TRUE))
@@ -478,10 +474,10 @@ row_z_plot[row_z_plot > 2] <- 2
 row_z_plot[row_z_plot < -2] <- -2
 ```
 
-```{r Column normalize heat map + dendrogram}
+```{r Row normalize heat map + dendrogram, fig.width = 12, fig.height = 8}
 # Column annotations
 annotation_col <- data.frame(
-  Treatment = c("repl", "repl", "repl", "lown", "lown", "lown", "lowp", "lowp", "lowp"),
+  Treatment = c("control", "control", "control", "low nitrogen", "low nitrogen", "low nitrogen", "low phosphorus", "low phosphorus", "low phosphorus"),
   Replicate = c("A", "B", "C", "A", "B", "C", "A", "B", "C")
 )
 
@@ -490,9 +486,9 @@ rownames(annotation_col) <- sample_levels
 # Choose cleaner annotation colors
 annotation_colors <- list(
   Treatment = c(
-    repl = "#7AA6DC",
-    lown = "#C77CFF",
-    lowp = "#F4A582"
+    "control" = "#7AA6DC",
+    "low nitrogen" = "#C77CFF",
+    "low phosphorus" = "#F4A582"
   ),
   Replicate = c(
     A = "#81A665",
@@ -505,7 +501,9 @@ annotation_colors <- list(
 hm_cols <- colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(100)
 hm_breaks <- seq(-2, 2, length.out = 101)
 
-pheatmap(
+png("row-normalized_heatmap_dendrogram.png" , width = 2400, height = 1600, res = 170)
+
+pheatmap::pheatmap (
   row_z_plot,
   color = hm_cols,
   breaks = hm_breaks,
@@ -516,7 +514,7 @@ pheatmap(
   annotation_colors = annotation_colors,
   na_col = "grey",
   border_color = "white",
-  fontsize_row = 9,
+  fontsize_row = 10,
   fontsize_col = 10,
   angle_col = "45",
   cellheight = 15,
@@ -527,10 +525,11 @@ pheatmap(
   legend_labels = c("-2", "-1", "0", "1", "2"),
   main = "Row-normalized Metabolite Heatmap with Dendrogram"
 )
+dev.off()
 ```
 
-```{r fig.width = 12, fig.height = 8}
-# ---- Build wide matrix for log10 heatmap with dendrogram ----
+```{r Log 10 heatmap + dendrogram data }
+# ---- Build wide matrix for log10 heatmap with its own dendrogram ----
 
 # Start from the sample columns only
 mat_log10 <- df %>%
@@ -556,7 +555,7 @@ mat_log10 <- mat_log10[, sample_levels, drop = FALSE]
 log10_display <- log10(mat_log10 + 1e-12)
 
 # Make a second version only for clustering
-# Replace NA with row mean so dendrogram can be computed
+# Replace NA with the row mean so the dendrogram can still be built
 log10_for_cluster <- log10_display
 
 for (i in seq_len(nrow(log10_for_cluster))) {
@@ -567,33 +566,19 @@ for (i in seq_len(nrow(log10_for_cluster))) {
   log10_for_cluster[i, ] <- row_vals
 }
 
-# Remove rows with zero variation after imputation
-row_sd_log10 <- apply(log10_for_cluster, 1, sd, na.rm = TRUE)
-keep_log10 <- !is.na(row_sd_log10) & row_sd_log10 > 0
-
-log10_display <- log10_display[keep_log10, , drop = FALSE]
-log10_for_cluster <- log10_for_cluster[keep_log10, , drop = FALSE]
-
-# Build row dendrogram
+# Build a log10-specific row dendrogram
 row_hc_log10 <- hclust(dist(log10_for_cluster), method = "complete")
+
 ```
 
-```{r}
-# Column annotations 
-annotation_col <- data.frame(
-  Treatment = c("repl", "repl", "repl", "lown", "lown", "lown", "lowp", "lowp", "lowp"),
-  Replicate = c("A", "B", "C", "A", "B", "C", "A", "B", "C")
-)
-
-rownames(annotation_col) <- sample_levels
-
+```{r Log 10 heatmap +dendrogram plot, fig.width = 12, fig.height = 8}
 # Viridis-like palette for log10
 log10_cols <- viridisLite::viridis(100, option = "F", direction = -1, begin = 0.20)
-log10_breaks <- seq(min(log10_display, na.rm = TRUE), max(-2.0), length.out = 101)
+log10_breaks <- seq(min(log10_display, na.rm = TRUE), -2, length.out = 101)
 
-png("metabolite_heatmap_log10_dendrogram.png" , width = 2400, height = 1600, res = 200)
+png("metabolite_heatmap_log10_dendrogram.png", width = 2600, height = 1800, res = 180)
 
-pheatmap(
+pheatmap::pheatmap(
   log10_display,
   color = log10_cols,
   breaks = log10_breaks,
@@ -604,15 +589,248 @@ pheatmap(
   annotation_colors = annotation_colors,
   na_col = "grey",
   border_color = "white",
-  fontsize_row = 9,
+  fontsize_row = 10,
   fontsize_col = 10,
   angle_col = "45",
-  treeheight_row = 120,
+  cellheight = 15,
   cellwidth = 30,
-  cellheight = 13,
+  treeheight_row = 150,
   treeheight_col = 0,
   main = "Log10 Metabolite Heatmap"
 )
+
+dev.off()
+```
+
+```{r log 2 fc heatmap data + dendrogram data}
+# Build wide matrix for log2FC heatmap with its own dendrogram
+
+fc_mat <- fc_long %>%
+  select(mtabName, sample_disp, log2FC) %>%
+  mutate(sample_disp = as.character(sample_disp)) %>%
+  pivot_wider(names_from = sample_disp, values_from = log2FC) %>%
+  tibble::column_to_rownames("mtabName") %>%
+  as.matrix()
+
+# Keep columns in biological order
+fc_mat <- fc_mat[, sample_levels, drop = FALSE]
+
+# Matrix for plotting
+fc_plot <- fc_mat
+
+# Make a second version only for clustering
+# Replace NA with the row mean; if the whole row is NA, use 0
+fc_for_cluster <- fc_mat
+
+for (i in seq_len(nrow(fc_for_cluster))) {
+  row_vals <- fc_for_cluster[i, ]
+  row_mean <- mean(row_vals, na.rm = TRUE)
+  if (is.nan(row_mean)) row_mean <- 0
+  row_vals[is.na(row_vals)] <- row_mean
+  fc_for_cluster[i, ] <- row_vals
+}
+
+# Build a log2FC-specific row dendrogram
+row_hc_fc <- hclust(dist(fc_for_cluster), method = "complete")
+
+# Use full data range
+max_abs_fc <- max(abs(fc_plot), na.rm = TRUE)
+fc_cols <- colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(100)
+fc_breaks <- seq(-max_abs_fc, max_abs_fc, length.out = 101)
+```
+
+```{r log 2 fc heatmap data + dendrogram plotting}
+png("log2fc_heatmap_dendrogram.png", width = 2400, height = 1600, res = 170)
+
+pheatmap::pheatmap(
+  fc_plot,
+  color = fc_cols,
+  breaks = fc_breaks,
+  cluster_rows = row_hc_fc,
+  cluster_cols = FALSE,
+  gaps_col = c(3, 6),
+  annotation_col = annotation_col,
+  annotation_colors = annotation_colors,
+  na_col = "grey",
+  border_color = "white",
+  fontsize_row = 10,
+  fontsize_col = 10,
+  angle_col = "45",
+  cellheight = 15,
+  cellwidth = 30,
+  treeheight_row = 110,
+  treeheight_col = 0,
+  legend_breaks = c(-max_abs_fc, 0, max_abs_fc),
+  legend_labels = round(c(-max_abs_fc, 0, max_abs_fc), 2),
+  main = "Log2 Fold Change Heatmap with Dendrogram"
+)
+
+dev.off()
+```
+
+```{r column normalize heatmap + dendrogram data & plotting}
+# ---- Build wide matrix for column-normalized heatmap with its own dendrogram ----
+
+mat_col <- df %>%
+  select(all_of(sample_cols)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  as.matrix()
+
+rownames(mat_col) <- df$mtabName
+
+colnames(mat_col) <- colnames(mat_col) %>%
+  str_replace_all("\\.+", "_") %>%
+  str_replace_all("__+", "_") %>%
+  str_replace_all("_$", "")
+
+# Keep columns in biological order
+mat_col <- mat_col[, sample_levels, drop = FALSE]
+
+# Column-normalize
+col_z_display <- scale(mat_col, center = TRUE, scale = TRUE)
+col_z_display[is.nan(col_z_display)] <- NA
+
+# Make a second version only for clustering
+# Replace NA with the row mean; if the whole row is NA, use 0
+col_z_for_cluster <- col_z_display
+
+for (i in seq_len(nrow(col_z_for_cluster))) {
+  row_vals <- col_z_for_cluster[i, ]
+  row_mean <- mean(row_vals, na.rm = TRUE)
+  if (is.nan(row_mean)) row_mean <- 0
+  row_vals[is.na(row_vals)] <- row_mean
+  col_z_for_cluster[i, ] <- row_vals
+}
+
+# Build a column-normalized-specific row dendrogram
+row_hc_col <- hclust(dist(col_z_for_cluster), method = "complete")
+
+# Keep original values for plotting
+col_z_plot <- col_z_display
+
+# Use the full display range
+max_abs_col <- max(abs(col_z_plot), na.rm = TRUE)
+col_cols <- colorRampPalette(rev(RColorBrewer::brewer.pal(11, "RdBu")))(100)
+col_breaks <- seq(-max_abs_col, max_abs_col, length.out = 101)
+
+png("column_normalized_heatmap_dendrogram.png", width = 2400, height = 1600, res = 170)
+
+pheatmap::pheatmap(
+  col_z_plot,
+  color = col_cols,
+  breaks = col_breaks,
+  cluster_rows = row_hc_col,
+  cluster_cols = FALSE,
+  gaps_col = c(3, 6),
+  annotation_col = annotation_col,
+  annotation_colors = annotation_colors,
+  na_col = "grey",
+  border_color = "white",
+  fontsize_row = 10,
+  fontsize_col = 10,
+  angle_col = "45",
+  cellheight = 15,
+  cellwidth = 30,
+  treeheight_row = 150,
+  treeheight_col = 0,
+  legend_breaks = c(-max_abs_col, 0, max_abs_col),
+  legend_labels = round(c(-max_abs_col, 0, max_abs_col), 2),
+  main = "Column-normalized Metabolite Heatmap with Dendrogram"
+)
+
+dev.off()
+```
+
+# Top 10 metabolite
+
+```{r Top 10 metabolite data & plotting, message = FALSE}
+# ---- Figure 5: Top 10 rank-abundance plots, stacked vertically ----
+
+# Summarize mean concentration for each metabolite within each treatment
+rank_df <- long %>%
+  group_by(Condition, mtabName) %>%
+  summarise(
+    mean_conc = mean(conc, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Treatment = case_when(
+      Condition == "repl" ~ "Control",
+      Condition == "lown" ~ "Low nitrogen",
+      Condition == "lowp" ~ "Low phosphorus"
+    )
+  )
+
+# Keep only the top 10 metabolites within each treatment
+top10_rank_df <- rank_df %>%
+  group_by(Treatment) %>%
+  slice_max(order_by = mean_conc, n = 10, with_ties = FALSE) %>%
+  arrange(desc(mean_conc), .by_group = TRUE) %>%
+  mutate(
+    # Make a facet-specific x variable so each panel can have its own order
+    metab_facet = paste(Treatment, mtabName, sep = "__"),
+    metab_facet = factor(metab_facet, levels = unique(metab_facet))
+  ) %>%
+  ungroup()
+
+# Plot as 3 stacked panels
+p_rank_top10 <- ggplot(top10_rank_df, aes(x = metab_facet, y = mean_conc)) +
+  geom_col(fill = "steelblue") +
+  facet_wrap(~ Treatment, ncol = 1, scales = "free_x") +
+  scale_x_discrete(labels = function(x) sub("^.*__", "", x)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.08))) +
+  labs(
+    title = "Top 10 Most Abundant Metabolites by Treatment",
+    x = "Metabolite",
+    y = "Mean concentration across replicates"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 20),
+    axis.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    strip.text = element_text(face = "bold", size = 13),
+    panel.spacing = unit(1.2, "lines")
+  )
+
+p_rank_top10
+
+ggsave("top10_rank_abundance_by_treatment.png", p_rank_top10,
+       width = 12, height = 18, dpi = 300)
+```
+
+```{r Top 10 metabolite tranform log data & plotting, message = FALSE}
+top10_rank_df_log <- rank_df %>%
+  mutate(mean_conc_plot = mean_conc + 1e-12) %>%
+  group_by(Treatment) %>%
+  slice_max(order_by = mean_conc, n = 10, with_ties = FALSE) %>%
+  arrange(desc(mean_conc), .by_group = TRUE) %>%
+  mutate(
+    metab_facet = paste(Treatment, mtabName, sep = "__"),
+    metab_facet = factor(metab_facet, levels = unique(metab_facet))
+  ) %>%
+  ungroup()
+
+p_rank_top10_log <- ggplot(top10_rank_df_log, aes(x = metab_facet, y = mean_conc_plot, group = 1)) +
+#  geom_line(color = "steelblue") +
+  geom_point(color = "steelblue", size = 2.5) +
+  facet_wrap(~ Treatment, ncol = 1, scales = "free_x") +
+  scale_x_discrete(labels = function(x) sub("^.*__", "", x)) +
+  scale_y_log10() +
+  labs(
+    title = "Top 10 Most Abundant Metabolites by Treatment",
+    x = "Metabolite",
+    y = "Mean concentration across replicates (log10 scale)"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 20),
+    axis.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    strip.text = element_text(face = "bold", size = 13),
+    panel.spacing = unit(1.2, "lines")
+  ) 
+p_rank_top10_log
 
 ```
 
