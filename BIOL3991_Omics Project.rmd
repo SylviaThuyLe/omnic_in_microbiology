@@ -761,29 +761,57 @@ rank_df <- long %>%
     )
   )
 
-# Keep only the top 10 metabolites within each treatment
-top10_rank_df <- rank_df %>%
+# Find the top 10 metabolites within each treatment
+top10_mets <- rank_df %>%
   group_by(Treatment) %>%
   slice_max(order_by = mean_conc, n = 10, with_ties = FALSE) %>%
   arrange(desc(mean_conc), .by_group = TRUE) %>%
+  select(Treatment, mtabName)
+
+# Go back to the original long data and keep all 3 replicates
+plot_df <- long %>%
   mutate(
-    # Make a facet-specific x variable so each panel can have its own order
-    metab_facet = paste(Treatment, mtabName, sep = "__"),
-    metab_facet = factor(metab_facet, levels = unique(metab_facet))
+    Treatment = case_when(
+      Condition == "repl" ~ "Control",
+      Condition == "lown" ~ "Low nitrogen",
+      Condition == "lowp" ~ "Low phosphorus"
+    )
   ) %>%
-  ungroup()
+  inner_join(top10_mets, by = c("Treatment", "mtabName"))
+
+# Create the metabolite order within each treatment
+met_order <- rank_df %>%
+  inner_join(top10_mets, by = c("Treatment", "mtabName")) %>%
+  group_by(Treatment) %>%
+  arrange(desc(mean_conc), .by_group = TRUE) %>%
+  mutate(
+    metab_facet = paste(Treatment, mtabName, sep = "__")
+  ) %>%
+  ungroup() %>%
+  distinct(Treatment, mtabName, metab_facet)
+
+plot_df <- plot_df %>%
+  left_join(met_order, by = c("Treatment", "mtabName")) %>%
+  mutate(
+    metab_facet = factor(metab_facet, levels = unique(met_order$metab_facet)),
+    Replicate = factor(Replicate, levels = c("A", "B", "C")),
+    conc_plot = conc + 1e-12   # needed so 0 values can appear on a log scale
+  )
 
 # Plot as 3 stacked panels
-p_rank_top10 <- ggplot(top10_rank_df, aes(x = metab_facet, y = mean_conc)) +
-  geom_col(fill = "steelblue") +
+p_rank_top10_log <- ggplot(plot_df, aes(x = metab_facet, y = conc_plot, color = Replicate)) +
+  geom_jitter(width = 0.2, size = 3, alpha = 0.8, na.rm = TRUE)  +
   facet_wrap(~ Treatment, ncol = 1, scales = "free_x") +
   scale_x_discrete(labels = function(x) sub("^.*__", "", x)) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.08))) +
+  scale_y_log10() +
+  scale_color_manual(values = c("A" = "#0072B2", "B" = "#D55E00", "C" = "#009E73")) +
   labs(
-    title = "Top 10 Most Abundant Metabolites by Treatment",
+    title = "Top 10 Most Abundant Metabolites Concentrations",
     x = "Metabolite",
-    y = "Mean concentration across replicates"
+    y = "Concentration (log)",
+    color = "Replicate"
   ) +
+  theme_bw(12) +
   theme(
     plot.title = element_text(hjust = 0.5, face = "bold", size = 20),
     axis.title = element_text(face = "bold", size = 14),
@@ -793,10 +821,11 @@ p_rank_top10 <- ggplot(top10_rank_df, aes(x = metab_facet, y = mean_conc)) +
     panel.spacing = unit(1.2, "lines")
   )
 
-p_rank_top10
 
-ggsave("top10_rank_abundance_by_treatment.png", p_rank_top10,
-       width = 12, height = 18, dpi = 300)
+p_rank_top10_log
+
+ggsave("log_top10_rank_abundance_by_treatment.png", p_rank_top10_log,
+       width = 11, height = 10, dpi = 300)
 ```
 
 ```{r Top 10 metabolite tranform log data & plotting, message = FALSE}
