@@ -816,9 +816,18 @@ plot_df_no_outlier <- plot_df %>%
 p_rank_top10_log <- ggplot(plot_df_no_outlier, aes(x = metab_facet, y = conc_plot, color = Replicate)) +
   geom_jitter(width = 0.2, size = 3, alpha = 0.8, na.rm = TRUE)  +
   facet_wrap(~ Treatment, ncol = 1, scales = "free_x") +
-  scale_x_discrete(labels = function(x) sub("^.*__", "", x)) +
+  scale_x_discrete(labels = function(x) {
+  x <- sub("^.*__", "", x)
+  x <- gsub("threonine \\(isom\\. homoserine\\)", "threonine", x)
+  x <- gsub("adenosine 5'-monophosphate pos", "AMP", x)
+#  x <- gsub("uridine 5-monophosphate pos", "UMP", x)
+  x <- gsub("s-adenosyl-l-methionine", "SAM", x)
+  x <- gsub("glutamic acid pos", "glutamic acid", x)
+  x <- gsub("aspartic acid neg", "aspartic acid", x)
+  x
+}) +
   scale_y_log10() +
-  scale_color_manual(values = c("A" = "#0072B2", "B" = "#D55E00", "C" = "#009E73")) +
+  scale_color_manual(values = c(A = "#81A665", B = "#FFD92F",C = "#E87687")) +
   labs(
     title = "Top 10 Most Abundant Metabolites Concentrations",
     x = "Metabolite",
@@ -840,6 +849,31 @@ p_rank_top10_log
 
 ggsave("log_top10_rank_abundance_by_treatment.png", p_rank_top10_log,
        width = 11, height = 10, dpi = 300)
+
+p_rank_top10_log2 <- ggplot(plot_df_no_outlier, aes(x = metab_facet, y = conc_plot, color = Replicate)) +
+  geom_jitter(width = 0.2, size = 3, alpha = 0.8, na.rm = TRUE)  +
+  facet_wrap(~ Treatment, ncol = 1, scales = "free_x") +
+  scale_x_discrete(labels = function(x) sub("^.*__", "", x)) +
+  scale_y_log10() +
+  scale_color_manual(values = c("A" = "#0072B2", "B" = "#D55E00", "C" = "#009E73")) +
+  labs(
+    title = "Top 10 Most Abundant Metabolites Concentrations",
+    x = "Metabolite",
+    y = "Concentration (log)",
+    color = "Replicate"
+  ) +
+  theme_bw(12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 20),
+    axis.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    strip.text = element_text(face = "bold", size = 13),
+    panel.spacing = unit(1.2, "lines")
+  )
+
+
+p_rank_top10_log2
 ```
 
 ```{r Top 10 metabolite tranform log data & plotting, message = FALSE}
